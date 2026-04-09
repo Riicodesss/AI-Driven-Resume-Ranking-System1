@@ -9,8 +9,6 @@ from controller.ranking.rank import calculate_resume_score
 
 router = APIRouter()
 
-
-# ✅ Utility: serialize Mongo objects
 def serialize_mongo_doc(doc: Any) -> Any:
     if isinstance(doc, list):
         return [serialize_mongo_doc(item) for item in doc]
@@ -27,13 +25,11 @@ def serialize_mongo_doc(doc: Any) -> Any:
 async def rank_resumes(job_id: str) -> Dict[str, Any]:
 
     try:
-        # ✅ Validate job_id
         if not ObjectId.is_valid(job_id):
             raise AppError("Invalid job_id", 400)
 
         job_object_id = ObjectId(job_id)
 
-        # ✅ Fetch job
         job = db["jobdescriptions"].find_one({"_id": job_object_id})
 
         if not job:
@@ -44,14 +40,12 @@ async def rank_resumes(job_id: str) -> Dict[str, Any]:
         if not department:
             raise AppError("JD title missing in job data", 500)
 
-        # ✅ Fetch ALL resumes (no designation filter)
         resumes = list(
             db["candidateprofiles"].find({
                 "summaryForAI": {"$exists": True, "$nin": [None, {}]}
             })
         )
 
-        # ✅ No resumes case
         if not resumes:
             response_data = {
                 "job_id": job_id,
@@ -70,7 +64,6 @@ async def rank_resumes(job_id: str) -> Dict[str, Any]:
 
         ranked = []
 
-        # ✅ Calculate scores
         for resume in resumes:
             try:
                 score_data = await calculate_resume_score(resume, job)
@@ -78,7 +71,6 @@ async def rank_resumes(job_id: str) -> Dict[str, Any]:
                 ranked.append({
                     "resume_id": str(resume["_id"]),
 
-                    # 🔥 UPDATED NAME LOGIC
                     "name": (
                         resume.get("name") or
                         resume.get("summaryForAI", {}).get("name") or
@@ -99,10 +91,8 @@ async def rank_resumes(job_id: str) -> Dict[str, Any]:
                     500
                 )
 
-        # ✅ Sort by score
         ranked.sort(key=lambda x: x["final_score"], reverse=True)
 
-        # ✅ Save rankings in DB
         for i, item in enumerate(ranked):
             rank_position = i + 1
             resume_id = ObjectId(item["resume_id"])
@@ -121,7 +111,6 @@ async def rank_resumes(job_id: str) -> Dict[str, Any]:
                 }
             )
 
-        # ✅ Final response
         response_data = {
             "job_id": job_id,
             "designation": department,
